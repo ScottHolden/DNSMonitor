@@ -1,0 +1,15 @@
+{
+  "nameservers": [
+    "1.1.1.1",
+    "8.8.8.8",
+    "192.168.99.99"
+  ],
+  "domains": [
+    "google.com",
+    "microsoft.com"
+  ],
+  "secondsBetweenTests": 5,
+  "secondsBeforeTimeout": 30,
+  "appInsightsConnectionString": "",
+  "fileLogFolder": ""
+}

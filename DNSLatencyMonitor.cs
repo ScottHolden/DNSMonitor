@@ -125,23 +125,38 @@ namespace DNSMonitor
 		{
 			var logger = _logger.ForContext("Operation", "Timeout");
 
-			int sleepTime = _secondsBeforeTimeout * 500;
+			int sleepTime = Math.Min(_secondsBeforeTimeout * 500, _secondsBetweenTests * 2000);
 			while (!cancellationToken.IsCancellationRequested)
 			{
 				await Task.Delay(sleepTime, cancellationToken);
-				foreach (var (requestId, requestDetails) in _requestLatency)
+				if (cancellationToken.IsCancellationRequested) return;
+
+				try
 				{
-					double latencyMs = (DateTimeOffset.Now - requestDetails.RequestTime).TotalMilliseconds;
-					if (latencyMs > _secondsBeforeTimeout * 1000)
+					var keysToCheck = _requestLatency.Keys.ToArray();
+					foreach (var requestId in keysToCheck)
 					{
-						_requestLatency.Remove(requestId);
-						logger.Warning("#{responseId}: ({latencyMs}ms) {remoteEndpoint} -> NO RESPONSE", requestId, latencyMs, requestDetails.Resolver);
-						_tc?.TrackMetric("DnsResolutionLatency", latencyMs, new Dictionary<string, string>(){
-							{ "Resolver", $"{requestDetails.Resolver}" },
-							{ "Domain", $"{requestDetails.Domain.Questions.First().Name}" },
-							{ "Timeout", "true" }
-						});
+						// Be defensive just in case
+						if (_requestLatency.TryGetValue(requestId, out var requestDetails))
+						{
+							double latencyMs = (DateTimeOffset.Now - requestDetails.RequestTime).TotalMilliseconds;
+							if (latencyMs > _secondsBeforeTimeout * 1000)
+							{
+								_requestLatency.Remove(requestId);
+								logger.Warning("#{responseId}: ({latencyMs}ms) {remoteEndpoint} -> NO RESPONSE", requestId, latencyMs, requestDetails.Resolver);
+								_tc?.TrackMetric("DnsResolutionLatency", latencyMs, new Dictionary<string, string>(){
+									{ "Resolver", $"{requestDetails.Resolver}" },
+									{ "Domain", $"{requestDetails.Domain.Questions.First().Name}" },
+									{ "Timeout", "true" }
+								});
+							}
+						}
 					}
+				}
+				catch (Exception e)
+				{
+					logger.Error(e, "Error while checking timeouts, {exceptionMessage}", e.Message);
+					_tc?.TrackException(e);
 				}
 			}
 		}
